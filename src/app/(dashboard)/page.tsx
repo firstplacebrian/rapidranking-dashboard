@@ -1,42 +1,73 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Globe, Building2, KeyRound, Coins } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuthStore } from '@/stores/auth.store';
+import { api } from '@/lib/api-client';
 
-const stats = [
-  {
-    name: 'Total Sites',
-    value: '12',
-    icon: Globe,
-    color: 'text-blue-600',
-    bgColor: 'bg-blue-100',
-  },
-  {
-    name: 'Businesses',
-    value: '48',
-    icon: Building2,
-    color: 'text-green-600',
-    bgColor: 'bg-green-100',
-  },
-  {
-    name: 'Active Licenses',
-    value: '8',
-    icon: KeyRound,
-    color: 'text-purple-600',
-    bgColor: 'bg-purple-100',
-  },
-  {
-    name: 'Credits Remaining',
-    value: '2,450',
-    icon: Coins,
-    color: 'text-orange-600',
-    bgColor: 'bg-orange-100',
-  },
-];
+interface Stats {
+  sites: number;
+  businesses: number;
+  licenses: number;
+  credits: number;
+}
 
 export default function DashboardPage() {
   const { user, organization } = useAuthStore();
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const data = await api.get<Stats>('/stats');
+        setStats(data);
+      } catch (error) {
+        console.error('Failed to load stats');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, []);
+
+  const statCards = [
+    {
+      name: 'Total Sites',
+      value: stats?.sites ?? 0,
+      icon: Globe,
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-100',
+      href: '/sites',
+    },
+    {
+      name: 'Businesses',
+      value: stats?.businesses ?? 0,
+      icon: Building2,
+      color: 'text-green-600',
+      bgColor: 'bg-green-100',
+      href: '/businesses',
+    },
+    {
+      name: 'Active Licenses',
+      value: stats?.licenses ?? 0,
+      icon: KeyRound,
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-100',
+      href: '/licenses',
+    },
+    {
+      name: 'Credits Remaining',
+      value: stats?.credits?.toLocaleString() ?? 0,
+      icon: Coins,
+      color: 'text-orange-600',
+      bgColor: 'bg-orange-100',
+      href: '/credits',
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -52,20 +83,26 @@ export default function DashboardPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
-          <Card key={stat.name}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-500">
-                {stat.name}
-              </CardTitle>
-              <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                <stat.icon className={`h-4 w-4 ${stat.color}`} />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{stat.value}</p>
-            </CardContent>
-          </Card>
+        {statCards.map((stat) => (
+          <Link key={stat.name} href={stat.href}>
+            <Card className="hover:shadow-md transition-shadow cursor-pointer">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-gray-500">
+                  {stat.name}
+                </CardTitle>
+                <div className={`p-2 rounded-lg ${stat.bgColor}`}>
+                  <stat.icon className={`h-4 w-4 ${stat.color}`} />
+                </div>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <div className="h-8 w-16 bg-gray-200 animate-pulse rounded"></div>
+                ) : (
+                  <p className="text-2xl font-bold">{stat.value}</p>
+                )}
+              </CardContent>
+            </Card>
+          </Link>
         ))}
       </div>
 
@@ -76,55 +113,50 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <button className="flex items-center gap-3 p-4 text-left border rounded-lg hover:bg-gray-50 transition-colors">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Globe className="h-5 w-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="font-medium">Add Site</p>
-                <p className="text-sm text-gray-500">Connect a new WordPress site</p>
-              </div>
-            </button>
-            <button className="flex items-center gap-3 p-4 text-left border rounded-lg hover:bg-gray-50 transition-colors">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <KeyRound className="h-5 w-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="font-medium">Generate License</p>
-                <p className="text-sm text-gray-500">Create a new license key</p>
-              </div>
-            </button>
-            <button className="flex items-center gap-3 p-4 text-left border rounded-lg hover:bg-gray-50 transition-colors">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <Coins className="h-5 w-5 text-orange-600" />
-              </div>
-              <div>
-                <p className="font-medium">Buy Credits</p>
-                <p className="text-sm text-gray-500">Top up your credit balance</p>
-              </div>
-            </button>
-            <button className="flex items-center gap-3 p-4 text-left border rounded-lg hover:bg-gray-50 transition-colors">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <Building2 className="h-5 w-5 text-green-600" />
-              </div>
-              <div>
-                <p className="font-medium">View Businesses</p>
-                <p className="text-sm text-gray-500">See all tracked businesses</p>
-              </div>
-            </button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Recent Activity Placeholder */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8 text-gray-500">
-            <p>No recent activity to show.</p>
-            <p className="text-sm">Activity from your sites will appear here.</p>
+            <Link href="/sites">
+              <button className="w-full flex items-center gap-3 p-4 text-left border rounded-lg hover:bg-gray-50 transition-colors">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Globe className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="font-medium">Add Site</p>
+                  <p className="text-sm text-gray-500">Connect a new WordPress site</p>
+                </div>
+              </button>
+            </Link>
+            <Link href="/licenses">
+              <button className="w-full flex items-center gap-3 p-4 text-left border rounded-lg hover:bg-gray-50 transition-colors">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <KeyRound className="h-5 w-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="font-medium">Generate License</p>
+                  <p className="text-sm text-gray-500">Create a new license key</p>
+                </div>
+              </button>
+            </Link>
+            <Link href="/credits">
+              <button className="w-full flex items-center gap-3 p-4 text-left border rounded-lg hover:bg-gray-50 transition-colors">
+                <div className="p-2 bg-orange-100 rounded-lg">
+                  <Coins className="h-5 w-5 text-orange-600" />
+                </div>
+                <div>
+                  <p className="font-medium">Buy Credits</p>
+                  <p className="text-sm text-gray-500">Top up your credit balance</p>
+                </div>
+              </button>
+            </Link>
+            <Link href="/businesses">
+              <button className="w-full flex items-center gap-3 p-4 text-left border rounded-lg hover:bg-gray-50 transition-colors">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <Building2 className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="font-medium">View Businesses</p>
+                  <p className="text-sm text-gray-500">See all tracked businesses</p>
+                </div>
+              </button>
+            </Link>
           </div>
         </CardContent>
       </Card>
