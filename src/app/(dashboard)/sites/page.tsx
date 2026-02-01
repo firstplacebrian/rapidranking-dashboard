@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Plus, Search, Globe, MoreHorizontal, ExternalLink, Trash2, Edit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
+import { api } from '@/lib/api-client';
 
 interface Site {
   id: string;
@@ -43,40 +44,31 @@ interface Site {
   businessCount: number;
 }
 
-const initialSites: Site[] = [
-  {
-    id: '1',
-    name: 'High Ground Jiu Jitsu',
-    url: 'https://highgroundjiujitsu.com',
-    status: 'active',
-    lastSyncAt: '2026-01-31T10:30:00Z',
-    businessCount: 1,
-  },
-  {
-    id: '2',
-    name: 'Dallas Roofing Pros',
-    url: 'https://dallasroofingpros.com',
-    status: 'active',
-    lastSyncAt: '2026-01-31T09:15:00Z',
-    businessCount: 3,
-  },
-  {
-    id: '3',
-    name: 'Plano HVAC Services',
-    url: 'https://planohvac.com',
-    status: 'inactive',
-    lastSyncAt: '2026-01-28T14:00:00Z',
-    businessCount: 2,
-  },
-];
-
 export default function SitesPage() {
-  const [sites, setSites] = useState<Site[]>(initialSites);
+  const [sites, setSites] = useState<Site[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [siteToDelete, setSiteToDelete] = useState<Site | null>(null);
   const [newSite, setNewSite] = useState({ name: '', url: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Fetch sites on load
+  useEffect(() => {
+    fetchSites();
+  }, []);
+
+  const fetchSites = async () => {
+    try {
+      const data = await api.get<Site[]>('/sites');
+      setSites(data);
+    } catch (error) {
+      toast.error('Failed to load sites');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const filteredSites = sites.filter(
     (site) =>
@@ -84,34 +76,39 @@ export default function SitesPage() {
       site.url.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleAddSite = () => {
+  const handleAddSite = async () => {
     if (!newSite.name || !newSite.url) {
       toast.error('Please fill in all fields');
       return;
     }
 
-    const site: Site = {
-      id: Date.now().toString(),
-      name: newSite.name,
-      url: newSite.url.startsWith('http') ? newSite.url : `https://${newSite.url}`,
-      status: 'pending',
-      lastSyncAt: null,
-      businessCount: 0,
-    };
-
-    setSites([site, ...sites]);
-    setIsAddDialogOpen(false);
-    setNewSite({ name: '', url: '' });
-    toast.success('Site added successfully!');
+    setIsSubmitting(true);
+    try {
+      const url = newSite.url.startsWith('http') ? newSite.url : `https://${newSite.url}`;
+      const site = await api.post<Site>('/sites', { name: newSite.name, url });
+      setSites([site, ...sites]);
+      setIsAddDialogOpen(false);
+      setNewSite({ name: '', url: '' });
+      toast.success('Site added successfully!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to add site');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleDeleteSite = () => {
+  const handleDeleteSite = async () => {
     if (!siteToDelete) return;
 
-    setSites(sites.filter((s) => s.id !== siteToDelete.id));
-    setIsDeleteDialogOpen(false);
-    setSiteToDelete(null);
-    toast.success('Site deleted successfully!');
+    try {
+      await api.delete(`/sites/${siteToDelete.id}`);
+      setSites(sites.filter((s) => s.id !== siteToDelete.id));
+      setIsDeleteDialogOpen(false);
+      setSiteToDelete(null);
+      toast.success('Site deleted successfully!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete site');
+    }
   };
 
   const openDeleteDialog = (site: Site) => {
@@ -142,6 +139,14 @@ export default function SitesPage() {
       minute: '2-digit',
     });
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -279,7 +284,9 @@ export default function SitesPage() {
             <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAddSite}>Add Site</Button>
+            <Button onClick={handleAddSite} disabled={isSubmitting}>
+              {isSubmitting ? 'Adding...' : 'Add Site'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
