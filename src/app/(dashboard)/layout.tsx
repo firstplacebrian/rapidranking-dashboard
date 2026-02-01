@@ -1,41 +1,45 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth.store';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
+import { api } from '@/lib/api-client';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
-// Temporary mock data for testing
-const mockUser = {
-  id: '1',
-  email: 'brian@rapidranking.io',
-  name: 'Brian',
-  role: 'owner' as const,
-  emailVerified: true,
-  createdAt: new Date().toISOString(),
-};
-
-const mockOrganization = {
-  id: '1',
-  name: 'High Ground Jiu Jitsu',
-  slug: 'high-ground-jiu-jitsu',
-  tier: 'agency' as const,
-  createdAt: new Date().toISOString(),
-};
-
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
-  const { isAuthenticated, isLoading, setLoading, login } = useAuthStore();
+  const router = useRouter();
+  const { isAuthenticated, isLoading, setLoading, login, logout } = useAuthStore();
 
   useEffect(() => {
-    // Temporary: Auto-login with mock data for testing
-    if (!isAuthenticated) {
-      login(mockUser, mockOrganization, [mockOrganization]);
-    }
-    setLoading(false);
+    const initAuth = async () => {
+      const token = localStorage.getItem('access_token');
+      
+      if (!token) {
+        setLoading(false);
+        router.push('/login');
+        return;
+      }
+
+      try {
+        const response = await api.get<{
+          user: any;
+          organization: any;
+          organizations: any[];
+        }>('/auth/me');
+        
+        login(response.user, response.organization, response.organizations);
+      } catch (error) {
+        logout();
+        router.push('/login');
+      }
+    };
+
+    initAuth();
   }, []);
 
   if (isLoading) {
@@ -44,6 +48,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
       </div>
     );
+  }
+
+  if (!isAuthenticated) {
+    return null;
   }
 
   return (
