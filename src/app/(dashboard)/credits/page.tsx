@@ -1,52 +1,35 @@
 'use client';
 
-import { Coins, TrendingUp, TrendingDown, CreditCard } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Coins, TrendingUp, TrendingDown, CreditCard, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { toast } from 'sonner';
+import { api } from '@/lib/api-client';
 
-const mockTransactions = [
-  {
-    id: '1',
-    type: 'usage',
-    amount: -50,
-    description: 'RapidScan - GeoGrid scan',
-    action: 'geogrid_scan',
-    createdAt: '2026-01-31T14:30:00Z',
-  },
-  {
-    id: '2',
-    type: 'usage',
-    amount: -25,
-    description: 'RapidBuild - Content generation',
-    action: 'content_generation',
-    createdAt: '2026-01-31T12:15:00Z',
-  },
-  {
-    id: '3',
-    type: 'purchase',
-    amount: 1000,
-    description: 'Credit pack purchase',
-    action: 'purchase',
-    createdAt: '2026-01-30T09:00:00Z',
-  },
-  {
-    id: '4',
-    type: 'usage',
-    amount: -100,
-    description: 'RapidReport - Monthly report',
-    action: 'report_generation',
-    createdAt: '2026-01-29T16:45:00Z',
-  },
-  {
-    id: '5',
-    type: 'bonus',
-    amount: 500,
-    description: 'Welcome bonus',
-    action: 'bonus',
-    createdAt: '2026-01-15T10:00:00Z',
-  },
-];
+interface CreditBalance {
+  balance: number;
+  monthlyUsage: number;
+  monthlyLimit: number;
+}
+
+interface Transaction {
+  id: string;
+  amount: number;
+  type: string;
+  description: string;
+  action: string | null;
+  createdAt: string;
+}
 
 const creditPacks = [
   { credits: 500, price: 25, popular: false },
@@ -56,8 +39,56 @@ const creditPacks = [
 ];
 
 export default function CreditsPage() {
-  const currentBalance = 2450;
-  const monthlyUsage = 175;
+  const [balance, setBalance] = useState<CreditBalance | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isBuyDialogOpen, setIsBuyDialogOpen] = useState(false);
+  const [selectedPack, setSelectedPack] = useState<typeof creditPacks[0] | null>(null);
+  const [isPurchasing, setIsPurchasing] = useState(false);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const [balanceData, historyData] = await Promise.all([
+        api.get<CreditBalance>('/credits/balance'),
+        api.get<Transaction[]>('/credits/history'),
+      ]);
+      setBalance(balanceData);
+      setTransactions(historyData);
+    } catch (error) {
+      toast.error('Failed to load credits data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleBuyCredits = async () => {
+    if (!selectedPack) return;
+
+    setIsPurchasing(true);
+    try {
+      await api.post('/credits/add', {
+        amount: selectedPack.credits,
+        description: `Purchased ${selectedPack.credits} credits`,
+      });
+      toast.success(`Added ${selectedPack.credits} credits!`);
+      setIsBuyDialogOpen(false);
+      setSelectedPack(null);
+      fetchData(); // Refresh data
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to purchase credits');
+    } finally {
+      setIsPurchasing(false);
+    }
+  };
+
+  const openBuyDialog = (pack: typeof creditPacks[0]) => {
+    setSelectedPack(pack);
+    setIsBuyDialogOpen(true);
+  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -67,6 +98,20 @@ export default function CreditsPage() {
       minute: '2-digit',
     });
   };
+
+  const estimatedDays = balance
+    ? balance.monthlyUsage > 0
+      ? Math.round((balance.balance / balance.monthlyUsage) * 30)
+      : 999
+    : 0;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -85,7 +130,7 @@ export default function CreditsPage() {
             <Coins className="h-5 w-5 text-orange-500" />
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{currentBalance.toLocaleString()}</p>
+            <p className="text-3xl font-bold">{balance?.balance.toLocaleString() || 0}</p>
             <p className="text-sm text-gray-500">credits available</p>
           </CardContent>
         </Card>
@@ -98,7 +143,7 @@ export default function CreditsPage() {
             <TrendingDown className="h-5 w-5 text-red-500" />
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{monthlyUsage}</p>
+            <p className="text-3xl font-bold">{balance?.monthlyUsage || 0}</p>
             <p className="text-sm text-gray-500">credits used</p>
           </CardContent>
         </Card>
@@ -111,7 +156,7 @@ export default function CreditsPage() {
             <TrendingUp className="h-5 w-5 text-green-500" />
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">~42</p>
+            <p className="text-3xl font-bold">~{estimatedDays > 999 ? '∞' : estimatedDays}</p>
             <p className="text-sm text-gray-500">at current usage</p>
           </CardContent>
         </Card>
@@ -133,6 +178,7 @@ export default function CreditsPage() {
                 className={`relative border rounded-lg p-4 text-center hover:border-blue-500 transition-colors cursor-pointer ${
                   pack.popular ? 'border-blue-500 ring-1 ring-blue-500' : ''
                 }`}
+                onClick={() => openBuyDialog(pack)}
               >
                 {pack.popular && (
                   <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-blue-600">
@@ -157,41 +203,72 @@ export default function CreditsPage() {
           <CardTitle>Recent Transactions</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {mockTransactions.map((tx) => (
-              <div
-                key={tx.id}
-                className="flex items-center justify-between py-3 border-b last:border-0"
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`p-2 rounded-full ${
-                      tx.amount > 0 ? 'bg-green-100' : 'bg-red-100'
+          {transactions.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <p>No transactions yet.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {transactions.map((tx) => (
+                <div
+                  key={tx.id}
+                  className="flex items-center justify-between py-3 border-b last:border-0"
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`p-2 rounded-full ${
+                        tx.amount > 0 ? 'bg-green-100' : 'bg-red-100'
+                      }`}
+                    >
+                      {tx.amount > 0 ? (
+                        <TrendingUp className="h-4 w-4 text-green-600" />
+                      ) : (
+                        <TrendingDown className="h-4 w-4 text-red-600" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-medium">{tx.description}</p>
+                      <p className="text-sm text-gray-500">{formatDate(tx.createdAt)}</p>
+                    </div>
+                  </div>
+                  <p
+                    className={`font-semibold ${
+                      tx.amount > 0 ? 'text-green-600' : 'text-red-600'
                     }`}
                   >
-                    {tx.amount > 0 ? (
-                      <TrendingUp className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <TrendingDown className="h-4 w-4 text-red-600" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="font-medium">{tx.description}</p>
-                    <p className="text-sm text-gray-500">{formatDate(tx.createdAt)}</p>
-                  </div>
+                    {tx.amount > 0 ? '+' : ''}{tx.amount}
+                  </p>
                 </div>
-                <p
-                  className={`font-semibold ${
-                    tx.amount > 0 ? 'text-green-600' : 'text-red-600'
-                  }`}
-                >
-                  {tx.amount > 0 ? '+' : ''}{tx.amount}
-                </p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Buy Credits Dialog */}
+      <Dialog open={isBuyDialogOpen} onOpenChange={setIsBuyDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Purchase</DialogTitle>
+            <DialogDescription>
+              You are about to purchase {selectedPack?.credits.toLocaleString()} credits for ${selectedPack?.price}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 text-center">
+            <p className="text-4xl font-bold">{selectedPack?.credits.toLocaleString()}</p>
+            <p className="text-gray-500">credits</p>
+            <p className="text-2xl font-semibold mt-2">${selectedPack?.price}</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsBuyDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleBuyCredits} disabled={isPurchasing}>
+              {isPurchasing ? 'Processing...' : 'Confirm Purchase'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
